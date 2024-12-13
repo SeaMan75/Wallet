@@ -9,7 +9,12 @@ public class Constants {
     
     public enum WalletMode {
         EXPENSES,
-        BUDGET
+        INCOME
     }
     
+    public enum ResultSetState {
+        MORE_THAN_ONE,
+        ONLY_ONE,
+        EMPTY
+    }    
 }

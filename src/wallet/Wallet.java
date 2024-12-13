@@ -5,6 +5,7 @@ import java.io.PrintStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.nio.charset.StandardCharsets;
+import java.util.function.Consumer;
 import static wallet.Constants.WalletMode.EXPENSES;
 
 public class Wallet {
@@ -18,49 +19,56 @@ public class Wallet {
 
     private void subMenu() {
 
-        boolean loop = true;
-        int choice = 0;
+        Menu menu = new Menu(scanner);
 
-        while (loop) {
-
-            System.out.println("=== Меню: ===");
-            System.out.println("1. Доходы");
-            System.out.println("2. Расходы");
-            if (Helper.isAdministrator()) {
-                System.out.println("3. Список пользователей");
-            }
-            System.out.println("4. Просмотр бюджета за весь период");
-            System.out.println("0. Возврат в главное меню");
-            System.out.print("Выберите опцию: ");
-
-            choice = Helper.readInteger(4, scanner);
-            switch (choice) {
-                case 1 -> {
-                    AppendIncomeExpenses budget = new AppendIncomeExpenses(scanner);
-                    budget.runBudget();
-                }
-
-                case 2 -> {
-                    AppendIncomeExpenses budget = new AppendIncomeExpenses(scanner, EXPENSES);
-                    budget.runBudget();
-                }
-
-                case 3 -> {
-                    if (Helper.isAdministrator()) {
-                        Helper.selectDataUsers();
-                    }
-                }
-                case 4 -> {Helper.selectDataBudget(Helper.getUserId());}
+        String[] menuItems = {
+            "Доходы"
+            , "Расходы"
+            , "Список пользователей"
+            , "Просмотр бюджета за весь период"
+            , "Создание категории"    
+            , "Просмотр категорий по пользователям"
+            , "Общая сумма доходов и расходов и по категориям"
                 
-                case 0 -> {
-                    Helper.saveDatabaseToFiles();
-                    loop = false;
-                }
+        };
 
-                default ->
-                    System.out.println("Неверный выбор. Пожалуйста, попробуйте снова.");
-            }
-        } //while loop...        
+        Consumer<Integer>[] handlers = new Consumer[]{
+            choice -> {
+                AppendIncomeExpenses a = new AppendIncomeExpenses(scanner);
+                a.createIncomeExpense();
+            },
+            choice -> {
+                AppendIncomeExpenses a = new AppendIncomeExpenses(scanner, EXPENSES);
+                a.createIncomeExpense();
+            },
+            choice -> {
+                if (Helper.isAdministrator()) { //Список пользователей
+                    Helper.selectDataUsers();
+                }
+            },
+            choice -> Helper.selectDataBudget(Helper.getUserId()),  //Просмотр бюджета
+            
+            choice -> {
+                CategoryManager manager = new CategoryManager(scanner);
+                manager.createCategory();
+            },
+
+            choice -> {
+                Helper.showAssignedCategories();
+            },
+            choice -> {
+                AppendIncomeExpenses a = new AppendIncomeExpenses(scanner, EXPENSES);
+                a.showIncomeAndExpenses();
+            },
+
+
+            
+            //===================================    
+
+            choice -> Helper.saveDatabaseToFiles() // Обработчик для выхода
+        };
+
+        menu.subMenu(menuItems, handlers);
     }
 
     private void clearConsole() {

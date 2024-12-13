@@ -26,12 +26,13 @@ import java.util.Date;
 import java.util.List;
 import wallet.Constants.AuthResult;
 import wallet.Constants.WalletMode;
-import static wallet.Constants.WalletMode.BUDGET;
+import static wallet.Constants.WalletMode.EXPENSES;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import java.sql.DatabaseMetaData;
 import java.util.ArrayList;
+
 
 public class Helper {
 
@@ -80,7 +81,7 @@ public class Helper {
         } while (choice < 0);
         return choice;
     }
-
+    
     public static Date readDate(Scanner scanner) {
         LocalDate date = null;
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -98,6 +99,121 @@ public class Helper {
             }
         }
         return java.sql.Date.valueOf(date);
+    }
+
+    public static int findCategoryIdByName(String categoryName) {
+        int categoryId = -1;
+
+        String selectQuery = "SELECT Category_id FROM tblRefCategories WHERE category_name = ?";
+        
+        try (PreparedStatement pstmt = connection.prepareStatement(selectQuery)) {
+            pstmt.setString(1, categoryName);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                categoryId = rs.getInt("Category_id");
+            }
+            } catch (SQLException e) {
+                Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, null, e);
+            }
+            return categoryId;
+    }
+    
+    public static int addCategory(String categoryName, int category) {
+        int categoryId = -1;
+        String appendQuery = "INSERT INTO tblRefCategories (category_name, category) VALUES (?, ?)";
+
+        try (PreparedStatement pstmt = connection.prepareStatement(appendQuery
+                , Statement.RETURN_GENERATED_KEYS)) {
+                pstmt.setString(1, categoryName);
+                pstmt.setInt(2, category);
+            pstmt.executeUpdate();
+            ResultSet resultSet = pstmt.getGeneratedKeys();
+            if (resultSet.next()) {
+                categoryId = resultSet.getInt(1);
+            }
+        } 
+        catch (SQLException e) {
+            Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, e.getMessage(), e);
+        }
+        return categoryId;
+    }
+
+    public static void assignCategoryToUser(int categoryId, int userId, int budget) {
+
+        String appendQuery = "INSERT INTO tblCategoryByUser (category_id, user_id, budget) VALUES (?, ?, ?)";
+        try (PreparedStatement pstmt = connection.prepareStatement(appendQuery)) {
+            pstmt.setInt(1, categoryId);
+            pstmt.setInt(2, userId);
+            pstmt.setInt(3, budget);
+            pstmt.executeUpdate();
+        } 
+        catch (SQLException e) {
+            Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, e.getMessage(), e);
+        }
+    }
+
+    public static boolean isCategoryAssignedToUser(int categoryId, int userId) {
+        boolean assigned = false;
+        
+        String selectQuery = "SELECT id FROM tblCategoryByUser WHERE category_id = ? AND user_id = ?";
+
+        try (PreparedStatement pstmt = connection.prepareStatement(selectQuery)) {
+            pstmt.setInt(1, categoryId);
+            pstmt.setInt(2, userId);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                assigned = true;
+            }
+        } 
+        catch (SQLException e) {
+            Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, null, e);
+        }
+        return assigned;
+    }
+
+    public static void showAssignedCategories() {
+
+        String selectQuery = """
+            SELECT 
+                  u.user_name
+                , c.category_name
+                , cu.budget   
+                , c.category             
+            FROM tblCategoryByUser cu
+            INNER JOIN tblUsers u ON cu.user_id = u.user_id
+            INNER JOIN tblRefCategories c ON c.category_id = cu.category_id
+            ORDER BY u.user_name, c.category_name;
+            """;
+
+            try {
+
+                    ResultSet resultSet = statement.executeQuery(selectQuery);
+                    String user_name;
+                    String category_name;
+                    int budget;
+                    int category;
+
+                    while (resultSet.next()) {
+                        user_name = resultSet.getString("user_name");
+                        category_name = resultSet.getString("category_name");
+                        category = resultSet.getInt("category");
+                        budget = resultSet.getInt("budget");
+
+                        if(category == 0) {
+                        System.out.printf("Пользователь: %s; Категории: %s; Бюджет: %d%n"
+                            , user_name, category_name, budget);
+                        } else
+                        {
+                            System.out.printf("Пользователь: %s; Категории: %s%n"
+                            , user_name, category_name);
+                        }
+                    }
+            }        
+
+            catch (SQLException e) {
+                Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, null, e);
+            }    
+
     }
 
     public static void addIncome(int user_id, int category_id, Date whenDate, int amount) {
@@ -170,22 +286,30 @@ public class Helper {
 
         String query_categories = """
                              SELECT 
-                             category_name
+                             category_name, category
                              FROM tblRefCategories;""";
 
         String query_budget = """
                              SELECT category_id, user_id, when_date, amount, budget_flag 
                              FROM tblIncomeExpenses;""";
+        
+        String query_category_by_user = """
+                             SELECT category_id, user_id, budget
+                             FROM tblCategoryByUser;""";
+        
+        
 
         exportDataToJson(query_users, "data_tblUsers.json");
         exportDataToJson(query_categories, "data_tblRefCategories.json");
         exportDataToJson(query_budget, "data_tblIncomeExpenses.json");
+        exportDataToJson(query_category_by_user, "data_tblCategoryByUser.json");
     }
 
     public static void loadDatabaseFromFile() {
         importDataFromJson("data_tblUsers.json", "tblUsers", "user_password, user_login, user_name, user_role");
-        importDataFromJson("data_tblRefCategories.json", "tblRefCategories", "category_name");
+        importDataFromJson("data_tblRefCategories.json", "tblRefCategories", "category_name, category");
         importDataFromJson("data_tblIncomeExpenses.json", "tblIncomeExpenses", "category_id, user_id, when_date, amount, budget_flag");
+        importDataFromJson("data_tblCategoryByUser.json ", "tblCategoryByUser", "category_id, user_id, budget");
     }
 
     private static void importDataFromJson(String filePath, String tableName, String fields) {
@@ -388,10 +512,11 @@ public class Helper {
         try {
         
             String queryCreateTblCategoryByUser = """
-                CREATE TABLE tblCategoryVyUser (
+                CREATE TABLE tblCategoryByUser (
                                          id INT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
                                          category_id INT,
                                          user_id INT,
+                                         budget INT,
                                          FOREIGN KEY (category_id) REFERENCES tblRefCategories(Category_id) ON DELETE CASCADE ON UPDATE CASCADE,
                                          FOREIGN KEY (user_id) REFERENCES tblUsers(user_id) ON DELETE CASCADE ON UPDATE CASCADE
                                          );                 
@@ -415,14 +540,13 @@ public class Helper {
         user_name VARCHAR(50),
         user_login VARCHAR(50),
         user_password VARCHAR(50),
-        user_role INT
-        );
+        user_role INT);
     """;
             String queryCreateTableCategories = """
     CREATE TABLE tblRefCategories (
     Category_id INT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    category_name VARCHAR(50)
-    );
+    category_name VARCHAR(50),
+    category INT);
                                                         """;
             statement.executeUpdate(queryCreateTableUsers);
             statement.executeUpdate(queryCreateTableCategories);
@@ -461,13 +585,13 @@ public class Helper {
                 """;
 
                 String queryInsertCategories = """        
-                    INSERT INTO tblRefCategories (category_name) VALUES 
-                           ('Еда'),
-                           ('Развлечения'),
-                           ('Коммунальные услуги'),
-                           ('Такси'),
-                           ('Зарплата'),
-                           ('Бонус');
+                    INSERT INTO tblRefCategories (category_name, category) VALUES 
+                           ('Еда', 0),
+                           ('Развлечения', 0),
+                           ('Коммунальные услуги', 0),
+                           ('Такси', 0),
+                           ('Зарплата', 1),
+                           ('Бонус', 1);
                 """;
 
                 statement.executeUpdate(queryInsertUsers);
@@ -495,24 +619,88 @@ public class Helper {
             pstmt.setInt(2, user_id);
             pstmt.setDate(3, (java.sql.Date) whenDate);
             pstmt.setInt(4, amount);
-            pstmt.setInt(5, walletMode == BUDGET ? 1 : 0);
+            pstmt.setInt(5, walletMode == EXPENSES ? 0 : 1);
             pstmt.executeUpdate();
         } catch (SQLException e) {
         }
     }
 
-    public static ResultSet selectCategories() {
-        String selectQuery = "SELECT * FROM tblRefCategories ORDER BY category_name";
+    public static ResultSet selectCategories(int category) {
+        String selectQuery = """
+                             SELECT *  
+                             FROM tblRefCategories 
+                             WHERE category = ?  
+                             ORDER BY category_name;
+                             """;
+                
         ResultSet resultSet = null;
 
-        try {
-            resultSet = statement.executeQuery(selectQuery);
+        try (PreparedStatement pstmt = connection.prepareStatement(selectQuery)) {
+            pstmt.setInt(1, category);
+        
+            resultSet = pstmt.executeQuery();
         } catch (SQLException e) {
-            Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, null, e);
+            Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, e.getMessage(), e);
+        }
+        return resultSet;    
+    }
+    
+    public static int getCategoryByCategoryId(int category_id) {
+        String selectQuery = """
+        SELECT category  
+        FROM tblRefCategories 
+        WHERE Category_id = ?;
+        """;
+
+        int category = -1;
+
+        try (PreparedStatement pstmt = connection.prepareStatement(selectQuery)) {
+            pstmt.setInt(1, category_id);
+
+            ResultSet resultSet = pstmt.executeQuery();
+            if (resultSet.next()) {
+                category = resultSet.getInt("category");
+            }
+        } catch (SQLException e) {
+            Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, e.getMessage(), e);
+        }
+        return category;    
+    }
+
+    public static ResultSet executeQueryWithParams(String sqlQuery, Object... params) {
+        ResultSet resultSet = null;
+
+        try (PreparedStatement pstmt = connection.prepareStatement(sqlQuery)) {
+            for (int i = 0; i < params.length; i++) {
+                Object param = params[i];
+                if (param instanceof Integer integer) {
+                    pstmt.setInt(i + 1, integer);
+                } 
+                else if (param instanceof String string) {
+                    pstmt.setString(i + 1, string);
+                } 
+                else if (param instanceof Double aDouble) {
+                    pstmt.setDouble(i + 1, aDouble);
+                } 
+                else if (param instanceof Boolean aBoolean) {
+                    pstmt.setBoolean(i + 1, aBoolean);
+                } 
+                else if (param instanceof Date) {
+                    pstmt.setDate(i + 1, (java.sql.Date) param);
+                } 
+                else {
+                    throw new IllegalArgumentException("Неподдерживаемый тип параметра: " 
+                               + param.getClass().getName());
+                }
+            } 
+            resultSet = pstmt.executeQuery();
+        } 
+        catch (SQLException ex) {
+            Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
         }
         return resultSet;
     }
-
+    
     public static void selectDataUsers() {
 
         String selectQuery = "SELECT * FROM tblUsers ORDER BY user_name";
@@ -546,7 +734,7 @@ public class Helper {
     public static void selectDataBudget(int user_id, Date whenDate) {
         String selectQuery = """
               SELECT b.id, b.category_id, c.category_name, b.amount,
-                     CASE WHEN b.budget_flag = 1 THEN 'бюджет' ELSE 'расход' END AS budget_flag
+                     CASE WHEN b.budget_flag = 1 THEN 'доход' ELSE 'расход' END AS budget_flag
               FROM tblIncomeExpenses b JOIN tblRefCategories c ON b.category_id = c.Category_id 
               WHERE b.user_id = ? AND b.when_date = ?               
         """;
@@ -575,7 +763,7 @@ public class Helper {
         public static void selectDataBudget(int user_id) {
         String selectQuery = """
               SELECT b.id, b.category_id, c.category_name, b.amount,
-                     CASE WHEN b.budget_flag = 1 THEN 'бюджет' ELSE 'расход' END AS budget_flag
+                     CASE WHEN b.budget_flag = 1 THEN 'доход' ELSE 'расход' END AS budget_flag
               FROM tblIncomeExpenses b JOIN tblRefCategories c ON b.category_id = c.Category_id 
               WHERE b.user_id = ?;                
         """;
