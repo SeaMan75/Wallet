@@ -29,6 +29,7 @@ public class Wallet {
             , "Создание категории"    
             , "Просмотр категорий по пользователям"
             , "Общая сумма доходов и расходов и по категориям"
+            , "Перевод на другой кошелек"    
                 
         };
 
@@ -41,6 +42,7 @@ public class Wallet {
                 AppendIncomeExpenses a = new AppendIncomeExpenses(scanner, EXPENSES);
                 a.createIncomeExpense();
             },
+
             choice -> {
                 if (Helper.isAdministrator()) { //Список пользователей
                     Helper.selectDataUsers();
@@ -61,6 +63,10 @@ public class Wallet {
                 a.showIncomeAndExpenses();
             },
 
+            choice -> {
+                Transfer a = new Transfer(scanner);
+                a.transfer();
+            },
 
             
             //===================================    

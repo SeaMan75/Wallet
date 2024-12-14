@@ -118,6 +118,23 @@ public class Helper {
             return categoryId;
     }
     
+    public static String getUserNameById(int user_id) {
+        String user_name = "";
+
+        String selectQuery = "SELECT user_name FROM tblUsers WHERE user_id = ?";
+        
+        try (PreparedStatement pstmt = connection.prepareStatement(selectQuery)) {
+            pstmt.setInt(1, user_id);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                user_name = rs.getString("user_name");
+            }
+            } catch (SQLException ex) {
+                Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
+            }
+            return user_name;
+    }
+        
     public static int addCategory(String categoryName, int category) {
         int categoryId = -1;
         String appendQuery = "INSERT INTO tblRefCategories (category_name, category) VALUES (?, ?)";
@@ -570,22 +587,24 @@ public class Helper {
                     INSERT INTO tblUsers (user_name, user_login, user_password, user_role) 
                     VALUES 
                            ('Admin', 'admin', 'admin', 1),
-                           ('User2', 'user2', 'password2', 0),
-                           ('User3', 'user3', 'password3', 0),
-                           ('User4', 'user4', 'password4', 0),
-                           ('User5', 'user5', 'password5', 0),
-                           ('User6', 'user6', 'password6', 0),
-                           ('User7', 'user7', 'password7', 0),
-                           ('User8', 'user8', 'password8', 0),
-                           ('User9', 'user9', 'password9', 0),
-                           ('User10', 'user10', 'password10', 0),
-                           ('User11', 'user11', 'password11', 0),
-                           ('User12', 'user12', 'password12', 0),
-                           ('User13', 'user13', 'password13', 0);     
+                           ('Olechka90', 'olechka90', 'Ol3chka!90', 0),
+                           ('IvanPetrov', 'ivanpetrov', 'Iv@nP3tr0v', 0),
+                           ('NinaS', 'ninas', 'N1n@S#2024', 0),
+                           ('AlexeyK', 'alexeyk', 'Al3x3yK$', 0),
+                           ('MariaL', 'marial', 'M@ri@L2024', 0),
+                           ('SergeyT', 'sergeyt', 'S3rg3yT!', 0),
+                           ('ElenaM', 'elenam', 'El3n@M#90', 0),
+                           ('DmitryB', 'dmitryb', 'Dm1tryB$', 0),
+                           ('OlgaV', 'olgav', '0lg@V2024', 0),
+                           ('PavelD', 'paveld', 'P@v3lD!', 0),
+                           ('TatianaR', 'tatianar', 'T@t1@n@R$', 0),
+                           ('AndreyZ', 'andreyz', 'Andr3yZ#', 0);    
                 """;
 
                 String queryInsertCategories = """        
                     INSERT INTO tblRefCategories (category_name, category) VALUES 
+                           ('Перевод на кошелек', 0), 
+                           ('Прием из кошелька', 1), 
                            ('Еда', 0),
                            ('Развлечения', 0),
                            ('Коммунальные услуги', 0),
@@ -637,13 +656,42 @@ public class Helper {
 
         try (PreparedStatement pstmt = connection.prepareStatement(selectQuery)) {
             pstmt.setInt(1, category);
-        
             resultSet = pstmt.executeQuery();
         } catch (SQLException e) {
             Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, e.getMessage(), e);
         }
         return resultSet;    
     }
+    
+    public static ResultSet selectUsersExt(int user_id) {
+        String selectQuery = """
+                             SELECT user_id, user_name
+                             FROM tblUsers 
+                             WHERE user_id <> ?  
+                             ORDER BY user_name;
+                             """;
+                
+        ResultSet resultSet = null;
+
+        try (PreparedStatement pstmt = connection.prepareStatement(selectQuery)) {
+            pstmt.setInt(1, user_id);
+            resultSet = pstmt.executeQuery();
+        } catch (SQLException e) {
+            Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, e.getMessage(), e);
+        }
+        return resultSet;    
+    }
+    
+
+
+    public static int getTransferToWalletCategoryId() {
+        return findCategoryIdByName("Перевод на кошелек");
+    }
+    
+    public static int getReceiveFromWalletCategoryId() {
+        return findCategoryIdByName("Прием из кошелька");
+    }
+    
     
     public static int getCategoryByCategoryId(int category_id) {
         String selectQuery = """

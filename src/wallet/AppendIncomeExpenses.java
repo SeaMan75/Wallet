@@ -174,27 +174,56 @@ public class AppendIncomeExpenses {
             System.out.print("Доход по категориям: ");
             resultSet = Helper.executeQueryWithParams(
                     """
-                    SELECT c.category_name, SUM(amount) amount FROM tblIncomeExpenses b
-                    JOIN tblRefCategories c ON c.category_id = b.category_id
-                    WHERE b.user_id = ? AND b.budget_flag = 1
-                    GROUP BY c.category_name
+                    SELECT c.category_name, sub.amount
+                        FROM (
+                            SELECT b.category_id, SUM(b.amount) amount
+                            FROM tblIncomeExpenses b
+                            WHERE b.user_id = ? AND b.budget_flag = 1
+                            GROUP BY b.category_id
+                        ) sub
+                        JOIN tblRefCategories c ON c.category_id = sub.category_id;
                     """, user_id);
             showFormatted(resultSet, "Категория: %s, Сумма: %s", "category_name", "amount");
 
             System.out.print("Расход по категориям: ");
             resultSet = Helper.executeQueryWithParams(
                     """
-                    SELECT c.category_name, SUM(amount) amount FROM tblIncomeExpenses b
-                    JOIN tblRefCategories c ON c.category_id = b.category_id
-                    WHERE b.user_id = ? AND b.budget_flag = 0
-                    GROUP BY c.category_name
+                    SELECT c.category_name, sub.amount
+                    FROM (
+                        SELECT b.category_id, SUM(b.amount) amount
+                        FROM tblIncomeExpenses b
+                        WHERE b.user_id = ? AND b.budget_flag = 0
+                        GROUP BY b.category_id
+                    ) sub
+                    JOIN tblRefCategories c ON c.category_id = sub.category_id;
                     """, user_id);
             showFormatted(resultSet, "Категория: %s, Сумма: %s", "category_name", "amount");
             
-            
-            
-            
-            
+            System.out.print("Контроль бюджета: ");
+            resultSet = Helper.executeQueryWithParams(
+            """
+            SELECT c.category_name, sub.amount, cu.budget,
+            CASE
+                WHEN sub.amount < cu.budget * 0.75 THEN 'в пределах бюджета'
+                WHEN sub.amount >= cu.budget * 0.75 AND sub.amount < cu.budget THEN 'бюджет на исходе'
+            ELSE 'за пределами бюджета'
+            END AS budget_status
+            FROM (
+                SELECT b.category_id, SUM(b.amount) amount
+                FROM tblIncomeExpenses b
+                WHERE b.user_id = ? AND b.budget_flag = 0
+                GROUP BY b.category_id
+            ) sub
+            JOIN tblRefCategories c ON c.category_id = sub.category_id
+            JOIN tblCategoryByUser cu ON cu.category_id = sub.category_id AND cu.user_id = ?
+            """, user_id, user_id);
+
+            showFormatted(resultSet, "Категория: %s, Сумма: %s"
+                    + ", Бюджет: %s, Статус: %s"
+                    , "category_name"
+                    , "amount"
+                    , "budget"
+                    , "budget_status");
             
         } catch (SQLException ex) {
             Logger.getLogger(AppendIncomeExpenses.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
