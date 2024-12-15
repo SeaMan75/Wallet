@@ -6,7 +6,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.nio.charset.StandardCharsets;
 import java.util.function.Consumer;
-import static wallet.Constants.WalletMode.EXPENSES;
 
 public class Wallet {
 
@@ -30,16 +29,17 @@ public class Wallet {
             , "Просмотр категорий по пользователям"
             , "Общая сумма доходов и расходов и по категориям"
             , "Перевод на другой кошелек"    
+            , "Начислить зарплату"    
                 
         };
 
         Consumer<Integer>[] handlers = new Consumer[]{
             choice -> {
-                AppendIncomeExpenses a = new AppendIncomeExpenses(scanner);
+                AppendIncomeExpenses a = new AppendIncomeExpenses(scanner, 1);
                 a.createIncomeExpense();
             },
             choice -> {
-                AppendIncomeExpenses a = new AppendIncomeExpenses(scanner, EXPENSES);
+                AppendIncomeExpenses a = new AppendIncomeExpenses(scanner, 0);
                 a.createIncomeExpense();
             },
 
@@ -59,13 +59,18 @@ public class Wallet {
                 Helper.showAssignedCategories();
             },
             choice -> {
-                AppendIncomeExpenses a = new AppendIncomeExpenses(scanner, EXPENSES);
+                AppendIncomeExpenses a = new AppendIncomeExpenses(scanner, 0);
                 a.showIncomeAndExpenses();
             },
 
             choice -> {
                 Transfer a = new Transfer(scanner);
                 a.transfer();
+            },
+            choice -> {
+                AppendIncomeExpenses a = new AppendIncomeExpenses(scanner, 0);
+                a.toIssueAsalary(700000);
+                a.showBalance();
             },
 
             
@@ -109,6 +114,8 @@ public class Wallet {
                     System.out.println(Helper.Welcome());
                     if (Helper.isAuthorized()) {
                         Helper.getUserId();
+                        AppendIncomeExpenses a = new AppendIncomeExpenses(scanner, 0);
+                        a.showBalance();
                         subMenu();
                     }
                 }

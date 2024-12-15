@@ -2,13 +2,12 @@ package wallet;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Date;
+import java.sql.Date;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Scanner;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import wallet.Constants.WalletMode;
 import static wallet.Helper.readInteger;
 
 public class Transfer {
@@ -36,6 +35,11 @@ public class Transfer {
         public String getName() {
             return name;
         }
+    
+    @Override
+        public String toString() {
+            return name; // Возвращаем имя категории
+        }
     }
 
     public Transfer(Scanner scanner){
@@ -55,7 +59,7 @@ public class Transfer {
         int category1 = Helper.getTransferToWalletCategoryId();
         int category2 = Helper.getReceiveFromWalletCategoryId();
         
-        Date whenDate = new Date();
+        Date whenDate = Date.valueOf(LocalDate.now());
         
         // Привязываем расходную операцию к пользователю, если она еще не привязана:
         int budget;
@@ -66,13 +70,13 @@ public class Transfer {
             } else budget = 0;    
             Helper.assignCategoryToUser(category1, user_id, budget);
         }    
-        Helper.insertBudgetData(amount, whenDate, user_id, category1, WalletMode.EXPENSES);
+        Helper.insertBudgetData(amount, whenDate, user_id, category1);
     
         if (!Helper.isCategoryAssignedToUser(category2, other_user_id)) {
             budget = 0;    
             Helper.assignCategoryToUser(category1, other_user_id, budget);
         }    
-        Helper.insertBudgetData(amount, whenDate, other_user_id, category2, WalletMode.INCOME);
+        Helper.insertBudgetData(amount, whenDate, other_user_id, category2);
     }
     
     private void usersMenu() {
@@ -81,29 +85,22 @@ public class Transfer {
         System.out.println("====================================");
 
         ResultSet resultSet = Helper.selectUsersExt(user_id);
-        List<User> users = new ArrayList<>();
 
-        int choice = 0;
-
-        String m = "=== Выберите получателя: ===";
+        String message = "=== Выберите получателя: ===";
         if (Helper.isAdministrator()) {
-            m += " (Код пользователя: " + user_id + ")";
+            message += " (Код пользователя: " + user_id + ")";
+            System.out.println(message);
         }
 
         try {
-            while (resultSet.next()) {
-                users.add(new Transfer.User(resultSet.getInt("user_id"), resultSet.getString("user_name")));
-            }
-            int index = 1;
-            for (Transfer.User _user : users) {
-                System.out.println(index + ". " + _user.getName());
-                index++;
-            }
+            List<Transfer.User> users = Helper.selectItems(resultSet, message, String.valueOf(user_id), Helper.isAdministrator(), (var resultSet1) -> 
+            new Transfer.User(resultSet1.getInt("user_id"), resultSet1.getString("user_name"))
+            );
 
-            boolean loop = true;
+            var loop = true;
+            int choice;
 
             while (loop) {
-
                 choice = Helper.readInteger(users.size(), scanner);
                 if (choice > 0 && choice <= users.size()) {
                     this.other_user_id = users.get(choice - 1).getId();
@@ -111,8 +108,9 @@ public class Transfer {
                 }
             }
 
-        } catch (SQLException ex) {
-            Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
+        } 
+        catch (SQLException ex) {
+                Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 }

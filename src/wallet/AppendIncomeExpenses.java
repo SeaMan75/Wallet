@@ -2,24 +2,21 @@ package wallet;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Date;
-import java.util.ArrayList;
+import java.time.LocalDate;
+import java.sql.Date;
 import java.util.List;
 import java.util.Scanner;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import wallet.Constants.WalletMode;
-import static wallet.Constants.WalletMode.INCOME;
-import static wallet.Helper.readDate;
 import static wallet.Helper.readInteger;
 
 public class AppendIncomeExpenses {
 
-    private Scanner scanner;
-    private int user_id;
+    private final Scanner scanner;
+    private final int user_id;
     private int category_id;
-    private String user_name;
-    WalletMode walletMode;
+    private final String user_name;
+    private final int category;
 
     class Category {
 
@@ -38,17 +35,18 @@ public class AppendIncomeExpenses {
         public String getName() {
             return name;
         }
+        @Override
+        public String toString() {
+            return name; // Возвращаем имя категории
+    
+        }
     }
 
-    public AppendIncomeExpenses(Scanner scanner, WalletMode walletMode) {
+    public AppendIncomeExpenses(Scanner scanner, int category) {
         this.scanner = scanner;
         this.user_id = Helper.getUserId();
         this.user_name = Helper.getUserName();
-        this.walletMode = walletMode;
-    }
-
-    public AppendIncomeExpenses(Scanner scanner) {
-        this(scanner, Constants.WalletMode.INCOME);
+        this.category = category;
     }
 
     private void showData(Date whenDate) {
@@ -60,8 +58,7 @@ public class AppendIncomeExpenses {
     
     public void createIncomeExpense() {
         categoryMenu();
-        System.out.println("Пожалуйста, введите дату в формате YYYY-mm-dd:");
-        Date whenDate = readDate(scanner);
+        Date whenDate = Date.valueOf(LocalDate.now());
 
         System.out.println("Пожалуйста, введите сумму:");
         int amount = readInteger(scanner);
@@ -75,76 +72,48 @@ public class AppendIncomeExpenses {
             Helper.assignCategoryToUser(category_id, user_id, budget);
         }    
 
-        Helper.insertBudgetData(amount, whenDate, user_id, category_id, walletMode);
+        Helper.insertBudgetData(amount, whenDate, user_id, category_id);
         showData(whenDate);
     }
 
     private void categoryMenu() {
 
-        String s = walletMode == INCOME ? "* (ДОХОДЫ) * " : "* (РАСХОДЫ) *";
-        int category = walletMode == INCOME ? 1 : 0;
-
         System.out.println("====================================");
-        System.out.println(s);
+        System.out.println("Доходы/расходы в зависимости от выбранной категории");
         System.out.println("====================================");
 
-        ResultSet resultSet = Helper.selectCategories(category);
-        List<Category> categories = new ArrayList<>();
-
-        int choice = 0;
-
-        String m = "=== Выберите категорию: ===";
+        ResultSet resultSet = Helper.selectCategories(this.category);
+        
+        String message = "=== Выберите категорию: ===";
         if (Helper.isAdministrator()) {
-            m += " (Код пользователя: " + user_id + ")";
+            message += " (Код пользователя: " + user_id + ")";
         }
-
+        
         try {
-            while (resultSet.next()) {
-                categories.add(new Category(resultSet.getInt("category_id"), resultSet.getString("category_name")));
-            }
-            int index = 1;
-            for (Category _category : categories) {
-                System.out.println(index + ". " + _category.getName());
-                index++;
-            }
+            List<Category> categories = 
+            Helper.selectItems(resultSet, message, String.valueOf(user_id)
+                    , Helper.isAdministrator()
+                    , (var resultSet1) 
+                            -> new Category(resultSet1.getInt("category_id")
+                                    , resultSet1.getString("category_name")));
 
-            boolean loop = true;
+                var loop = true;
+                int choice;
 
-            while (loop) {
+                while (loop) {
 
-                choice = Helper.readInteger(categories.size(), scanner);
-                if (choice > 0 && choice <= categories.size()) {
-                    this.category_id = categories.get(choice - 1).getId();
-                    loop = false;
+                    choice = Helper.readInteger(categories.size(), scanner);
+                    if (choice > 0 && choice <= categories.size()) {
+                        this.category_id = categories.get(choice - 1).getId();
+                        loop = false;
+                    }
                 }
-            }
 
         } catch (SQLException ex) {
             Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
-    
-    private void showFormatted(ResultSet resultSet, String format, Object... params) throws SQLException {
-        while (resultSet.next()) {
-            Object[] formattedParams = new Object[params.length];
-            for (int i = 0; i < params.length; i++) {
-                if (params[i] instanceof String) {
-                    formattedParams[i] = resultSet.getString((String) params[i]);
-                } else if (params[i] instanceof Integer) {
-                    formattedParams[i] = resultSet.getInt((String) params[i]);
-                } else if (params[i] instanceof Double) {
-                    formattedParams[i] = resultSet.getDouble((String) params[i]);
-                } else if (params[i] instanceof Boolean) {
-                    formattedParams[i] = resultSet.getBoolean((String) params[i]);
-                } else {
-                    throw new IllegalArgumentException("Неподдерживаемый тип параметра: " + params[i].getClass().getName());
-                }
-            }
-            System.out.println(String.format(format, formattedParams));     
-        }
-        System.out.println("=============");
-    }
-    
+   
     private void showAmount(ResultSet resultSet) throws SQLException {
         while (resultSet.next()) {
             System.out.println(resultSet.getInt("amount"));
@@ -158,16 +127,20 @@ public class AppendIncomeExpenses {
             System.out.print("Общий доход: ");
             ResultSet resultSet = Helper.executeQueryWithParams(
                     """
-                    SELECT SUM(amount) amount FROM tblIncomeExpenses
-                    WHERE user_id = ? AND budget_flag = 1;
+                    SELECT SUM(ie.amount) AS amount
+                    FROM tblIncomeExpenses ie
+                    JOIN tblRefCategories rc ON ie.category_id = rc.Category_id
+                    WHERE ie.user_id = ? AND rc.category = 1;
                     """, user_id);
             showAmount(resultSet);
 
             System.out.print("Общий расход: ");
             resultSet = Helper.executeQueryWithParams(
                     """
-                    SELECT SUM(amount) amount FROM tblIncomeExpenses
-                    WHERE user_id = ? AND budget_flag = 0;
+                    SELECT SUM(ie.amount) AS amount
+                    FROM tblIncomeExpenses ie
+                    JOIN tblRefCategories rc ON ie.category_id = rc.Category_id
+                    WHERE ie.user_id = ? AND rc.category = 0;
                     """, user_id);
             showAmount(resultSet);
             
@@ -178,12 +151,13 @@ public class AppendIncomeExpenses {
                         FROM (
                             SELECT b.category_id, SUM(b.amount) amount
                             FROM tblIncomeExpenses b
-                            WHERE b.user_id = ? AND b.budget_flag = 1
+                            WHERE b.user_id = ?
                             GROUP BY b.category_id
                         ) sub
-                        JOIN tblRefCategories c ON c.category_id = sub.category_id;
+                        JOIN tblRefCategories c ON c.category_id = sub.category_id
+                    WHERE c.category = 1;
                     """, user_id);
-            showFormatted(resultSet, "Категория: %s, Сумма: %s", "category_name", "amount");
+            Helper.showResultSetFormatted(resultSet, "Категория: %s, Сумма: %s", "category_name", "amount");
 
             System.out.print("Расход по категориям: ");
             resultSet = Helper.executeQueryWithParams(
@@ -192,12 +166,13 @@ public class AppendIncomeExpenses {
                     FROM (
                         SELECT b.category_id, SUM(b.amount) amount
                         FROM tblIncomeExpenses b
-                        WHERE b.user_id = ? AND b.budget_flag = 0
+                        WHERE b.user_id = ?
                         GROUP BY b.category_id
                     ) sub
-                    JOIN tblRefCategories c ON c.category_id = sub.category_id;
+                    JOIN tblRefCategories c ON c.category_id = sub.category_id
+                    WHERE c.category = 0;
                     """, user_id);
-            showFormatted(resultSet, "Категория: %s, Сумма: %s", "category_name", "amount");
+            Helper.showResultSetFormatted(resultSet, "Категория: %s, Сумма: %s", "category_name", "amount");
             
             System.out.print("Контроль бюджета: ");
             resultSet = Helper.executeQueryWithParams(
@@ -211,14 +186,15 @@ public class AppendIncomeExpenses {
             FROM (
                 SELECT b.category_id, SUM(b.amount) amount
                 FROM tblIncomeExpenses b
-                WHERE b.user_id = ? AND b.budget_flag = 0
+                WHERE b.user_id = ?
                 GROUP BY b.category_id
             ) sub
             JOIN tblRefCategories c ON c.category_id = sub.category_id
             JOIN tblCategoryByUser cu ON cu.category_id = sub.category_id AND cu.user_id = ?
+            WHERE c.category = 0;
             """, user_id, user_id);
 
-            showFormatted(resultSet, "Категория: %s, Сумма: %s"
+            Helper.showResultSetFormatted(resultSet, "Категория: %s, Сумма: %s"
                     + ", Бюджет: %s, Статус: %s"
                     , "category_name"
                     , "amount"
@@ -229,4 +205,47 @@ public class AppendIncomeExpenses {
             Logger.getLogger(AppendIncomeExpenses.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
         }
     }
+    
+    public void showBalance(){
+        
+        ResultSet resultSet;
+        String selectQuery = """
+	SELECT 
+            SUM(CASE WHEN c.category = 1 THEN e.amount ELSE 0 END) total_income,
+            SUM(CASE WHEN c.category = 0 THEN e.amount ELSE 0 END) total_expenses,
+            SUM(CASE WHEN c.category = 1 THEN e.amount ELSE -e.amount END) balance
+        FROM 
+            tblIncomeExpenses e
+        JOIN 
+            tblRefCategories c ON e.category_id = c.Category_id
+        WHERE 
+            e.when_date <= ? AND user_id = ?;
+        """;
+        Date now = Date.valueOf(LocalDate.now());
+        try {
+
+            
+            System.out.println("Владелец кошелька: " + this.user_name);
+            resultSet = Helper.executeQueryWithParams(selectQuery, now, user_id);
+            Helper.showResultSetFormatted(resultSet, "Баланс: %s", "balance");
+        } catch (SQLException ex) {
+            Logger.getLogger(AppendIncomeExpenses.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
+        }
+
+        System.out.println("=============");
+    }
+    
+    public void toIssueAsalary(int salary) {
+        int SalaryCategoryId = Helper.SalaryCategoryId();
+        
+        if (!Helper.isCategoryAssignedToUser(SalaryCategoryId, this.user_id)) {
+            Helper.assignCategoryToUser(SalaryCategoryId, this.user_id, 0);
+        }    
+        Date whenDate = Date.valueOf(LocalDate.now());
+        Helper.insertBudgetData(salary, whenDate, this.user_id, SalaryCategoryId);
+    }
 }
+
+
+
+

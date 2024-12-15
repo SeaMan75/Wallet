@@ -7,11 +7,6 @@ public class Constants {
         USER
     }
     
-    public enum WalletMode {
-        EXPENSES,
-        INCOME
-    }
-    
     public enum ResultSetState {
         MORE_THAN_ONE,
         ONLY_ONE,

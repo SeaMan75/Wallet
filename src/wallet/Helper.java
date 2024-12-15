@@ -22,16 +22,14 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
-import java.util.Date;
+import java.sql.Date;
 import java.util.List;
 import wallet.Constants.AuthResult;
-import wallet.Constants.WalletMode;
-import static wallet.Constants.WalletMode.EXPENSES;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import java.sql.DatabaseMetaData;
 import java.util.ArrayList;
+import org.json.JSONArray;
 
 
 public class Helper {
@@ -234,7 +232,7 @@ public class Helper {
     }
 
     public static void addIncome(int user_id, int category_id, Date whenDate, int amount) {
-        String sql = "INSERT INTO tblIncomeExpenses (category_id, user_id, when_date, amount, budget_flag) VALUES (?, ?, ?, ?, 1)";
+        String sql = "INSERT INTO tblIncomeExpenses (category_id, user_id, when_date, amount) VALUES (?, ?, ?, ?)";
 
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setInt(1, category_id);
@@ -307,15 +305,13 @@ public class Helper {
                              FROM tblRefCategories;""";
 
         String query_budget = """
-                             SELECT category_id, user_id, when_date, amount, budget_flag 
+                             SELECT category_id, user_id, when_date, amount 
                              FROM tblIncomeExpenses;""";
         
         String query_category_by_user = """
                              SELECT category_id, user_id, budget
                              FROM tblCategoryByUser;""";
         
-        
-
         exportDataToJson(query_users, "data_tblUsers.json");
         exportDataToJson(query_categories, "data_tblRefCategories.json");
         exportDataToJson(query_budget, "data_tblIncomeExpenses.json");
@@ -325,7 +321,7 @@ public class Helper {
     public static void loadDatabaseFromFile() {
         importDataFromJson("data_tblUsers.json", "tblUsers", "user_password, user_login, user_name, user_role");
         importDataFromJson("data_tblRefCategories.json", "tblRefCategories", "category_name, category");
-        importDataFromJson("data_tblIncomeExpenses.json", "tblIncomeExpenses", "category_id, user_id, when_date, amount, budget_flag");
+        importDataFromJson("data_tblIncomeExpenses.json", "tblIncomeExpenses", "category_id, user_id, when_date, amount");
         importDataFromJson("data_tblCategoryByUser.json ", "tblCategoryByUser", "category_id, user_id, budget");
     }
 
@@ -546,7 +542,6 @@ public class Helper {
         user_id INT,
         when_date DATE,
         amount INT,
-        budget_flag INT,
         FOREIGN KEY (category_id) REFERENCES tblRefCategories(Category_id) ON DELETE CASCADE ON UPDATE CASCADE,
         FOREIGN KEY (user_id) REFERENCES tblUsers(user_id) ON DELETE CASCADE ON UPDATE CASCADE
         );
@@ -626,19 +621,18 @@ public class Helper {
     }
 
     public static void insertBudgetData(int amount, Date whenDate,
-            int user_id, int category_id, WalletMode walletMode) {
+            int user_id, int category_id) {
 
         String insertQuery = """
                              INSERT INTO tblIncomeExpenses (category_id, user_id, 
-                             when_date, amount, budget_flag) 
-                             VALUES (?, ?, ?, ?, ?)""";
+                             when_date, amount) 
+                             VALUES (?, ?, ?, ?)""";
 
         try (PreparedStatement pstmt = connection.prepareStatement(insertQuery)) {
             pstmt.setInt(1, category_id);
             pstmt.setInt(2, user_id);
             pstmt.setDate(3, (java.sql.Date) whenDate);
             pstmt.setInt(4, amount);
-            pstmt.setInt(5, walletMode == EXPENSES ? 0 : 1);
             pstmt.executeUpdate();
         } catch (SQLException e) {
         }
@@ -682,7 +676,26 @@ public class Helper {
         return resultSet;    
     }
     
-
+    public static void  showResultSetFormatted(ResultSet resultSet, String format, Object... params) throws SQLException {
+        while (resultSet.next()) {
+            Object[] formattedParams = new Object[params.length];
+            for (int i = 0; i < params.length; i++) {
+                if (params[i] instanceof String) {
+                    formattedParams[i] = resultSet.getString((String) params[i]);
+                } else if (params[i] instanceof Integer) {
+                    formattedParams[i] = resultSet.getInt((String) params[i]);
+                } else if (params[i] instanceof Double) {
+                    formattedParams[i] = resultSet.getDouble((String) params[i]);
+                } else if (params[i] instanceof Boolean) {
+                    formattedParams[i] = resultSet.getBoolean((String) params[i]);
+                } else {
+                    throw new IllegalArgumentException("Неподдерживаемый тип параметра: " + params[i].getClass().getName());
+                }
+            }
+            System.out.println(String.format(format, formattedParams));     
+        }
+        System.out.println("=============");
+    }
 
     public static int getTransferToWalletCategoryId() {
         return findCategoryIdByName("Перевод на кошелек");
@@ -692,6 +705,9 @@ public class Helper {
         return findCategoryIdByName("Прием из кошелька");
     }
     
+    public static int SalaryCategoryId() {
+        return findCategoryIdByName("Зарплата");
+    }
     
     public static int getCategoryByCategoryId(int category_id) {
         String selectQuery = """
@@ -733,8 +749,8 @@ public class Helper {
                 else if (param instanceof Boolean aBoolean) {
                     pstmt.setBoolean(i + 1, aBoolean);
                 } 
-                else if (param instanceof Date) {
-                    pstmt.setDate(i + 1, (java.sql.Date) param);
+                else if (param instanceof java.util.Date utilDate) {
+                    pstmt.setDate(i + 1, new java.sql.Date(utilDate.getTime()));
                 } 
                 else {
                     throw new IllegalArgumentException("Неподдерживаемый тип параметра: " 
@@ -782,7 +798,7 @@ public class Helper {
     public static void selectDataBudget(int user_id, Date whenDate) {
         String selectQuery = """
               SELECT b.id, b.category_id, c.category_name, b.amount,
-                     CASE WHEN b.budget_flag = 1 THEN 'доход' ELSE 'расход' END AS budget_flag
+                     CASE WHEN c.category = 1 THEN 'доход' ELSE 'расход' END AS budget_flag
               FROM tblIncomeExpenses b JOIN tblRefCategories c ON b.category_id = c.Category_id 
               WHERE b.user_id = ? AND b.when_date = ?               
         """;
@@ -811,7 +827,7 @@ public class Helper {
         public static void selectDataBudget(int user_id) {
         String selectQuery = """
               SELECT b.id, b.category_id, c.category_name, b.amount,
-                     CASE WHEN b.budget_flag = 1 THEN 'доход' ELSE 'расход' END AS budget_flag
+                     CASE WHEN c.category = 1 THEN 'доход' ELSE 'расход' END AS budget_flag
               FROM tblIncomeExpenses b JOIN tblRefCategories c ON b.category_id = c.Category_id 
               WHERE b.user_id = ?;                
         """;
@@ -833,4 +849,34 @@ public class Helper {
             Logger.getLogger(Helper.class.getName()).log(Level.SEVERE, null, e);
         }
     }
-}
+        
+    public static <T> List<T> selectItems(ResultSet resultSet
+                                            , String message
+                                            , String userId
+                                            , boolean isAdmin
+                                            , ItemMapper<T> mapper) throws SQLException {
+        List<T> items = new ArrayList<>();
+
+        String m = message;
+        if (isAdmin) {
+           m += " (Код пользователя: " + userId + ")";
+        }
+        System.out.println(m);
+
+        while (resultSet.next()) {
+            items.add(mapper.map(resultSet));
+        }
+
+        int index = 1;
+        for (T item : items) {
+            System.out.println(index + ". " + item.toString());
+            index++;
+        }
+
+        return items;
+    }
+
+    public interface ItemMapper<T> {
+        T map(ResultSet resultSet) throws SQLException;
+    }
+}    
